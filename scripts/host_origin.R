@@ -3,9 +3,10 @@ library(DoubletDecon)
 library(dplyr)
 library(ggplot2)
 library(patchwork)
+library(dittoSeq)
 
 # Load metadata
-samples <- read.table("../metadata/metadata.csv", sep=",", stringsAsFactors = F , header = T)
+samples <- read.table("../metadata/samples.csv", sep=",", stringsAsFactors = F , header = T)
 annotation <- read.table("../metadata/Placenta_anno_semifinal_22012021.csv", sep=",", stringsAsFactors = F , header = T)
 
 # Load dataset
@@ -21,13 +22,25 @@ plot1 <- FeatureScatter(object = plc, feature1 = "nCount_RNA", feature2 = "perce
 plot2 <- FeatureScatter(object = plc, feature1 = "nCount_RNA", feature2 = "nFeature_RNA")
 plot1 + plot2
 
-plc <- subset(x = plc, subset = nFeature_RNA > 200 & nFeature_RNA < 2000 & percent.mt < 1)
+# Subsetting if necessary
+#plc <- subset(x = plc, subset = nFeature_RNA > 200 & nFeature_RNA < 2000 & percent.mt < 1)
 
 # Doublets removal
 #newFiles=Improved_Seurat_Pre_Process(plc, num_genes=50, write_files=FALSE)
 
+# Add the annotation
+annotation$barcodes <- sapply(strsplit(annotation$X, "_"), "[", 2)
+meta <- annotation[which(annotation$stim==samples$stim[i]),]
+meta <- meta[which(meta$barcodes %in% colnames(plc)),]
+
+plc@meta.data$clusters <- meta$cell_type_semifina[match(colnames(plc), meta$barcodes)]
+plc@meta.data$clusters[which(plc@meta.data$clusters=="")] <- "unknown"
+
+# Plotting XIST distribution before normalization
+dittoPlot(plc, "XIST", group.by = "clusters", plots = c("ridgeplot", "jitter"))
+
 # Normalization
-#plc <- SCTransform(object = plc, verbose = FALSE)
+plc <- SCTransform(object = plc, verbose = FALSE)
 
 # Dimentionality reduction
 plc <- RunPCA(object = plc, features = VariableFeatures(object = plc))
@@ -48,13 +61,14 @@ DimPlot(object = plc, reduction = "umap", label = TRUE, pt.size = 0.5) + NoLegen
 
 # Mito genes plot
 plc@meta.data$mito <- 0
-plc@meta.data[which(plc@meta.data$percent.mt>0.5),]$mito <- 1
+plc@meta.data[which(plc@meta.data$percent.mt>2),]$mito <- 1
 DimPlot(object = plc, reduction = "umap", label = TRUE, pt.size = 0.5, group.by = "mito") + NoLegend()
 
 # Sex genes plots
 
 ## Female
 fplot <- FeaturePlot(object = plc, features = c("XIST"))
+fplot
 
 ## Male
 male_genes <- c("RPS4Y1", "EIF1AY1", "KDM5D", "DDX3Y", "DAZ", "BPY2", "SRY", "TSPY", "ZFY", "CDY", "TGIF2LY", "PRY", "VCY", "EIFAY")
@@ -70,19 +84,14 @@ fplot + mplot
 
 which(plc$male_genes1>0)
 RidgePlot(plc, features = mgenes, ncol = 2)
-RidgePlot(plc, features = "XIST", ncol = 2, group.by = "orig.ident")
-BarPlot(plc, features = "XIST", ncol = 2, group.by = "orig.ident")
-# Add cluster information
-annotation$barcodes <- sapply(strsplit(annotation$X, "_"), "[", 2)
-meta <- annotation[which(annotation$stim==samples$stim[i]),]
-meta <- meta[which(meta$barcodes %in% colnames(plc)),]
+RidgePlot(plc, features = "XIST", ncol = 2, group.by = "clusters")
 
-plc@meta.data$clusters <- meta$cell_type_semifina[match(colnames(plc), meta$barcodes)]
-plc@meta.data$clusters[which(plc@meta.data$clusters=="")] <- "unknown"
+dittoPlot(plc, "XIST", group.by = "clusters", plots = c("ridgeplot", "jitter"))
 
 ctypes <- DimPlot(object = plc, reduction = "umap", label = TRUE, pt.size = 0.5, group.by = "clusters")
 
 fplot + mplot + ctypes
+
 # New clusters
 pident=as.factor(meta$cell_type[match(colnames(plc), meta$barcodes)])
 names(pident)=colnames(plc)  
@@ -90,7 +99,8 @@ plc@meta.data$orig.ident=pident
 
 
 which(rownames(plc@assays$RNA@counts)=="XIST")
-
 mean(plc@assays$RNA@counts[9697,])
-
 max(plc@assays$RNA@counts)
+
+
+write.table(unlist(genenames), file = "genenames.txt", sep = "\n", quote = F, row.names = F)

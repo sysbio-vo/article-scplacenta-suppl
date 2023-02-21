@@ -37,7 +37,7 @@ plc@meta.data$clusters <- meta$cell_type_semifina[match(colnames(plc), meta$barc
 plc@meta.data$clusters[which(plc@meta.data$clusters=="")] <- "unknown"
 
 # Plotting XIST distribution before normalization
-dittoPlot(plc, "XIST", group.by = "clusters", plots = c("ridgeplot", "jitter"))
+dittoPlot(plc, "XIST", group.by = "clusters", plots = c("ridgeplot"), ridgeplot.shape = "count", ridgeplot.bins = 16)
 
 # Normalization
 plc <- SCTransform(object = plc, verbose = FALSE)
